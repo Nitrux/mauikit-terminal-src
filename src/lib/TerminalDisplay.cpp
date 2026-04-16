@@ -1051,10 +1051,10 @@ void TerminalDisplay::updateImage()
             }
         }
         
-        if (!_resizing) // not while _resizing, we're expecting a paintEvent
+        if (!_resizing) { // not while _resizing, we are expecting a paintEvent
             for (x = 0; x < columnsToUpdate; ++x) {
                 _hasBlinker |= (newLine[x].rendition & RE_BLINK);
-                
+
                 // Start drawing if this character or the next one differs.
                 // We also take the next one into account to handle the situation
                 // where characters exceed their cell width.
@@ -1073,38 +1073,40 @@ void TerminalDisplay::updateImage()
                     int lln = columnsToUpdate - x;
                     for (len = 1; len < lln; ++len) {
                         const Character &ch = newLine[x + len];
-                        
-                        if (!ch.character.unicode())
+
+                        if (!ch.character.unicode()) {
                             continue; // Skip trailing part of multi-col chars.
-                            
-                            bool nextIsDoubleWidth = (x + len + 1 == columnsToUpdate) ? false : (newLine[x + len + 1].character.unicode() == 0);
-                        
+                        }
+
+                        bool nextIsDoubleWidth = (x + len + 1 == columnsToUpdate) ? false : (newLine[x + len + 1].character.unicode() == 0);
+
                         if (ch.foregroundColor != cf || ch.backgroundColor != _clipboard || ch.rendition != cr || !dirtyMask[x + len]
                             || isLineChar(c) != lineDraw || nextIsDoubleWidth != doubleWidth)
                             break;
-                        
+
                         disstrU[p++] = c; // fontMap(c);
                     }
-                    
+
                     bool saveFixedFont = _fixedFont;
                     if (lineDraw)
                         _fixedFont = false;
                     if (doubleWidth)
                         _fixedFont = false;
-                    
+
                     updateLine = true;
-                    
+
                     _fixedFont = saveFixedFont;
                     x += len - 1;
                 }
             }
-            
+
             // both the top and bottom halves of double height _lines must always be redrawn
             // although both top and bottom halves contain the same characters, only
             // the top one is actually
             // drawn.
             if (_lineProperties.size() > y)
                 updateLine |= (_lineProperties[y] & LINE_DOUBLEHEIGHT);
+        }
         
         // if the characters on the line are different in the old and the new _image
         // then this line must be repainted.
@@ -1419,54 +1421,56 @@ void TerminalDisplay::drawContents(QPainter &paint, const QRect &rect)
     for (int y = luy; y <= rly; y++) {
         char16_t c = _image[loc(lux, y)].character.unicode();
         int x = lux;
-        if (!c && x)
+        if (!c && x) {
             x--; // Search for start of multi-column character
-            for (; x <= rlx; x++) {
-                int len = 1;
-                int p = 0;
-                
-                // reset our buffer to the maximal size
-                unistr.resize(bufferSize);
-                
-                // is this a single character or a sequence of characters ?
-                if (_image[loc(x, y)].rendition & RE_EXTENDED_CHAR) {
-                    // sequence of characters
-                    ushort extendedCharLength = 0;
-                    std::span chars = ExtendedCharTable::instance.lookupExtendedChar(_image[loc(x, y)].charSequence, extendedCharLength);
-                    for (int index = 0; index < extendedCharLength; index++) {
-                        Q_ASSERT(p < bufferSize);
-                        unistr[p++] = chars[index];
-                    }
-                } else {
-                    // single character
-                    c = _image[loc(x, y)].character.unicode();
-                    if (c) {
-                        Q_ASSERT(p < bufferSize);
-                        unistr[p++] = c; // fontMap(c);
-                    }
+        }
+        for (; x <= rlx; x++) {
+            int len = 1;
+            int p = 0;
+
+            // reset our buffer to the maximal size
+            unistr.resize(bufferSize);
+
+            // is this a single character or a sequence of characters ?
+            if (_image[loc(x, y)].rendition & RE_EXTENDED_CHAR) {
+                // sequence of characters
+                ushort extendedCharLength = 0;
+                std::span chars = ExtendedCharTable::instance.lookupExtendedChar(_image[loc(x, y)].charSequence, extendedCharLength);
+                for (int index = 0; index < extendedCharLength; index++) {
+                    Q_ASSERT(p < bufferSize);
+                    unistr[p++] = chars[index];
                 }
-                
-                bool lineDraw = isLineChar(c);
-                bool doubleWidth = (_image[qMin(loc(x, y) + 1, _imageSize)].character.unicode() == 0);
-                CharacterColor currentForeground = _image[loc(x, y)].foregroundColor;
-                CharacterColor currentBackground = _image[loc(x, y)].backgroundColor;
-                quint8 currentRendition = _image[loc(x, y)].rendition;
-                
-                while (x + len <= rlx && _image[loc(x + len, y)].foregroundColor == currentForeground
-                    && _image[loc(x + len, y)].backgroundColor == currentBackground && _image[loc(x + len, y)].rendition == currentRendition
-                    && (_image[qMin(loc(x + len, y) + 1, _imageSize)].character.unicode() == 0) == doubleWidth
-                    && isLineChar(c = _image[loc(x + len, y)].character.unicode()) == lineDraw) // Assignment!
-                {
-                    if (c)
-                        unistr[p++] = c; // fontMap(c);
-                    if (doubleWidth) // assert((_image[loc(x+len,y)+1].character == 0)), see above if condition
-                        len++; // Skip trailing part of multi-column character
-                        len++;
+            } else {
+                // single character
+                c = _image[loc(x, y)].character.unicode();
+                if (c) {
+                    Q_ASSERT(p < bufferSize);
+                    unistr[p++] = c; // fontMap(c);
                 }
-                if ((x + len < _usedColumns) && (!_image[loc(x + len, y)].character.unicode()))
-                    len++; // Adjust for trailing part of multi-column character
-                    
-                    bool save__fixedFont = _fixedFont;
+            }
+
+            bool lineDraw = isLineChar(c);
+            bool doubleWidth = (_image[qMin(loc(x, y) + 1, _imageSize)].character.unicode() == 0);
+            CharacterColor currentForeground = _image[loc(x, y)].foregroundColor;
+            CharacterColor currentBackground = _image[loc(x, y)].backgroundColor;
+            quint8 currentRendition = _image[loc(x, y)].rendition;
+
+            while (x + len <= rlx && _image[loc(x + len, y)].foregroundColor == currentForeground
+                && _image[loc(x + len, y)].backgroundColor == currentBackground && _image[loc(x + len, y)].rendition == currentRendition
+                && (_image[qMin(loc(x + len, y) + 1, _imageSize)].character.unicode() == 0) == doubleWidth
+                && isLineChar(c = _image[loc(x + len, y)].character.unicode()) == lineDraw) // Assignment!
+            {
+                if (c)
+                    unistr[p++] = c; // fontMap(c);
+                if (doubleWidth) { // assert((_image[loc(x+len,y)+1].character == 0)), see above if condition
+                    len++; // Skip trailing part of multi-column character
+                }
+                len++;
+            }
+            if ((x + len < _usedColumns) && (!_image[loc(x + len, y)].character.unicode()))
+                len++; // Adjust for trailing part of multi-column character
+
+            bool save__fixedFont = _fixedFont;
                 if (lineDraw)
                     _fixedFont = false;
                 unistr.resize(p);
@@ -1887,30 +1891,30 @@ void TerminalDisplay::mouseMoveEvent(QMouseEvent *ev)
 void TerminalDisplay::extendSelection(const QPoint &position)
 {
     QPoint pos = position;
-    
+
     if (!_screenWindow)
         return;
-    
+
     // if ( !contentsRect().contains(ev->pos()) ) return;
     QPoint tL = contentsRect().topLeft();
     int tLx = tL.x();
     int tLy = tL.y();
     int scroll = _scrollBar->value();
-    
-    // we're in the process of moving the mouse with the left button pressed
+
+    // we are in the process of moving the mouse with the left button pressed
     // the mouse cursor will kept caught within the bounds of the text in
     // this widget.
-    
+
     int linesBeyondWidget = 0;
-    
+
     QRect textBounds(tLx + _leftMargin, tLy + _topMargin, _usedColumns * qRound(_fontWidth) - 1, _usedLines * qRound(_fontHeight) - 1);
-    
+
     // Adjust position within text area bounds.
     QPoint oldpos = pos;
-    
+
     pos.setX(qBound(textBounds.left(), pos.x(), textBounds.right()));
     pos.setY(qBound(textBounds.top(), pos.y(), textBounds.bottom()));
-    
+
     if (oldpos.y() > textBounds.bottom()) {
         linesBeyondWidget = (oldpos.y() - textBounds.bottom()) / qRound(_fontHeight);
         _scrollBar->setValue(_scrollBar->value() + linesBeyondWidget + 1); // scrollforward
@@ -1919,7 +1923,7 @@ void TerminalDisplay::extendSelection(const QPoint &position)
         linesBeyondWidget = (textBounds.top() - oldpos.y()) / qRound(_fontHeight);
         _scrollBar->setValue(_scrollBar->value() - linesBeyondWidget - 1); // history
     }
-    
+
     QPoint here =
     getCharacterPosition(pos); // QPoint((pos.x()-tLx-_leftMargin+(qRound(_fontWidth)/2))/qRound(_fontWidth),(pos.y()-tLy-_topMargin)/qRound(_fontHeight));
     QPoint ohere;
@@ -1928,16 +1932,16 @@ void TerminalDisplay::extendSelection(const QPoint &position)
     QPoint _pntSelCorr = _pntSel;
     _pntSelCorr.ry() -= _scrollBar->value();
     bool swapping = false;
-    
+
     if (_wordSelectionMode) {
         // Extend to word boundaries
         int i;
         QChar selClass;
-        
+
         bool left_not_right = (here.y() < _iPntSelCorr.y() || (here.y() == _iPntSelCorr.y() && here.x() < _iPntSelCorr.x()));
         bool old_left_not_right = (_pntSelCorr.y() < _iPntSelCorr.y() || (_pntSelCorr.y() == _iPntSelCorr.y() && _pntSelCorr.x() < _iPntSelCorr.x()));
         swapping = left_not_right != old_left_not_right;
-        
+
         // Find left (left_not_right ? from here : from start)
         QPoint left = left_not_right ? here : _iPntSelCorr;
         i = loc(left.x(), left.y());
@@ -1953,7 +1957,7 @@ void TerminalDisplay::extendSelection(const QPoint &position)
                 }
             }
         }
-        
+
         // Find left (left_not_right ? from start : from here)
         QPoint right = left_not_right ? _iPntSelCorr : here;
         i = loc(right.x(), right.y());
@@ -1962,15 +1966,15 @@ void TerminalDisplay::extendSelection(const QPoint &position)
             while (((right.x() < _usedColumns - 1) || (right.y() < _usedLines - 1 && (_lineProperties[right.y()] & LINE_WRAPPED)))
                 && charClass(_image[i + 1].character) == selClass) {
                 i++;
-            if (right.x() < _usedColumns - 1)
-                right.rx()++;
+                if (right.x() < _usedColumns - 1)
+                    right.rx()++;
                 else {
                     right.rx() = 0;
                     right.ry()++;
                 }
-                }
+            }
         }
-        
+
         // Pick which is start (ohere) and which is extension (here)
         if (left_not_right) {
             here = left;
@@ -1981,22 +1985,22 @@ void TerminalDisplay::extendSelection(const QPoint &position)
         }
         ohere.rx()++;
     }
-    
+
     if (_lineSelectionMode) {
         // Extend to complete line
         bool above_not_below = (here.y() < _iPntSelCorr.y());
-        
+
         QPoint above = above_not_below ? here : _iPntSelCorr;
         QPoint below = above_not_below ? _iPntSelCorr : here;
-        
+
         while (above.y() > 0 && (_lineProperties[above.y() - 1] & LINE_WRAPPED))
             above.ry()--;
         while (below.y() < _usedLines - 1 && (_lineProperties[below.y()] & LINE_WRAPPED))
             below.ry()++;
-        
+
         above.setX(0);
         below.setX(_usedColumns - 1);
-        
+
         // Pick which is start (ohere) and which is extension (here)
         if (above_not_below) {
             here = above;
@@ -2005,33 +2009,33 @@ void TerminalDisplay::extendSelection(const QPoint &position)
             here = below;
             ohere = above;
         }
-        
+
         QPoint newSelBegin = QPoint(ohere.x(), ohere.y());
         swapping = !(_tripleSelBegin == newSelBegin);
         _tripleSelBegin = newSelBegin;
-        
+
         ohere.rx()++;
     }
-    
+
     int offset = 0;
     if (!_wordSelectionMode && !_lineSelectionMode) {
         int i;
         QChar selClass;
-        
+
         bool left_not_right = (here.y() < _iPntSelCorr.y() || (here.y() == _iPntSelCorr.y() && here.x() < _iPntSelCorr.x()));
         bool old_left_not_right = (_pntSelCorr.y() < _iPntSelCorr.y() || (_pntSelCorr.y() == _iPntSelCorr.y() && _pntSelCorr.x() < _iPntSelCorr.x()));
         swapping = left_not_right != old_left_not_right;
-        
+
         // Find left (left_not_right ? from here : from start)
         QPoint left = left_not_right ? here : _iPntSelCorr;
-        
+
         // Find left (left_not_right ? from start : from here)
         QPoint right = left_not_right ? _iPntSelCorr : here;
         if (right.x() > 0 && !_columnSelectionMode) {
             i = loc(right.x(), right.y());
             if (i >= 0 && i <= _imageSize) {
                 selClass = charClass(_image[i - 1].character);
-                /* if (selClass == ' ')
+                /* if (selClass == " ")
                  *                 {
                  *                   while ( right.x() < _usedColumns-1 && charClass(_image[i+1].character) == selClass && (right.y()<_usedLines-1) &&
                  *                                   !(_lineProperties[right.y()] & LINE_WRAPPED))
@@ -2043,7 +2047,7 @@ void TerminalDisplay::extendSelection(const QPoint &position)
             }*/
             }
         }
-        
+
         // Pick which is start (ohere) and which is extension (here)
         if (left_not_right) {
             here = left;
@@ -2055,30 +2059,32 @@ void TerminalDisplay::extendSelection(const QPoint &position)
             offset = -1;
         }
     }
-    
-    if ((here == _pntSelCorr) && (scroll == _scrollBar->value()))
+
+    if ((here == _pntSelCorr) && (scroll == _scrollBar->value())) {
         return; // not moved
-        
-        if (here == ohere)
-            return; // It's not left, it's not right.
-            
-            if (_actSel < 2 || swapping) {
-                if (_columnSelectionMode && !_lineSelectionMode && !_wordSelectionMode) {
-                    _screenWindow->setSelectionStart(ohere.x(), ohere.y(), true);
-                } else {
-                    _screenWindow->setSelectionStart(ohere.x() - 1 - offset, ohere.y(), false);
-                }
-            }
-            
-            _actSel = 2; // within selection
-            _pntSel = here;
-            _pntSel.ry() += _scrollBar->value();
-            
-            if (_columnSelectionMode && !_lineSelectionMode && !_wordSelectionMode) {
-                _screenWindow->setSelectionEnd(here.x(), here.y());
-            } else {
-                _screenWindow->setSelectionEnd(here.x() + offset, here.y());
-            }
+    }
+
+    if (here == ohere) {
+        return; // Not left, not right.
+    }
+
+    if (_actSel < 2 || swapping) {
+        if (_columnSelectionMode && !_lineSelectionMode && !_wordSelectionMode) {
+            _screenWindow->setSelectionStart(ohere.x(), ohere.y(), true);
+        } else {
+            _screenWindow->setSelectionStart(ohere.x() - 1 - offset, ohere.y(), false);
+        }
+    }
+
+    _actSel = 2; // within selection
+    _pntSel = here;
+    _pntSel.ry() += _scrollBar->value();
+
+    if (_columnSelectionMode && !_lineSelectionMode && !_wordSelectionMode) {
+        _screenWindow->setSelectionEnd(here.x(), here.y());
+    } else {
+        _screenWindow->setSelectionEnd(here.x() + offset, here.y());
+    }
 }
 
 void TerminalDisplay::mouseReleaseEvent(QMouseEvent *ev)
@@ -2339,10 +2345,9 @@ void TerminalDisplay::mouseTripleClickEvent(QMouseEvent *ev)
 
 bool TerminalDisplay::focusNextPrevChild(bool next)
 {
-    if (next)
-        return false; // This disables changing the active part in konqueror
-        // when pressing Tab
-        return false;
+    Q_UNUSED(next);
+    return false; // This disables changing the active part in konqueror
+    // when pressing Tab
     // return QWidget::focusNextPrevChild( next );
 }
 
@@ -3181,25 +3186,29 @@ void TerminalDisplay::simulateWheel(int x, int y, int buttons, int modifiers, QP
 
 void TerminalDisplay::simulateMouseMove(int x, int y, int button, int buttons, int modifiers)
 {
-    QMouseEvent event(QEvent::MouseMove, QPointF(x, y), (Qt::MouseButton)button, (Qt::MouseButtons)buttons, (Qt::KeyboardModifiers)modifiers);
+    const QPointF position(x, y);
+    QMouseEvent event(QEvent::MouseMove, position, position, static_cast<Qt::MouseButton>(button), static_cast<Qt::MouseButtons>(buttons), static_cast<Qt::KeyboardModifiers>(modifiers));
     mouseMoveEvent(&event);
 }
 
 void TerminalDisplay::simulateMousePress(int x, int y, int button, int buttons, int modifiers)
 {
-    QMouseEvent event(QEvent::MouseButtonPress, QPointF(x, y), (Qt::MouseButton)button, (Qt::MouseButtons)buttons, (Qt::KeyboardModifiers)modifiers);
+    const QPointF position(x, y);
+    QMouseEvent event(QEvent::MouseButtonPress, position, position, static_cast<Qt::MouseButton>(button), static_cast<Qt::MouseButtons>(buttons), static_cast<Qt::KeyboardModifiers>(modifiers));
     mousePressEvent(&event);
 }
 
 void TerminalDisplay::simulateMouseRelease(int x, int y, int button, int buttons, int modifiers)
 {
-    QMouseEvent event(QEvent::MouseButtonRelease, QPointF(x, y), (Qt::MouseButton)button, (Qt::MouseButtons)buttons, (Qt::KeyboardModifiers)modifiers);
+    const QPointF position(x, y);
+    QMouseEvent event(QEvent::MouseButtonRelease, position, position, static_cast<Qt::MouseButton>(button), static_cast<Qt::MouseButtons>(buttons), static_cast<Qt::KeyboardModifiers>(modifiers));
     mouseReleaseEvent(&event);
 }
 
 void TerminalDisplay::simulateMouseDoubleClick(int x, int y, int button, int buttons, int modifiers)
 {
-    QMouseEvent event(QEvent::MouseButtonDblClick, QPointF(x, y), (Qt::MouseButton)button, (Qt::MouseButtons)buttons, (Qt::KeyboardModifiers)modifiers);
+    const QPointF position(x, y);
+    QMouseEvent event(QEvent::MouseButtonDblClick, position, position, static_cast<Qt::MouseButton>(button), static_cast<Qt::MouseButtons>(buttons), static_cast<Qt::KeyboardModifiers>(modifiers));
     mouseDoubleClickEvent(&event);
 }
 
@@ -3312,6 +3321,7 @@ QString TerminalDisplay::selectedText() const
 
 void TerminalDisplay::findNext(const QString& regexp)
 {
+    Q_UNUSED(regexp);
     //     int startColumn, startLine;
     //
     //     screenWindow()->screen()->getSelectionEnd(startColumn, startLine);
@@ -3325,6 +3335,7 @@ void TerminalDisplay::findNext(const QString& regexp)
 
 void TerminalDisplay::findPrevious(const QString& regexp)
 {
+    Q_UNUSED(regexp);
 }
 
 void TerminalDisplay::matchFound(int startColumn, int startLine, int endColumn, int endLine)

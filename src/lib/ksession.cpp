@@ -308,6 +308,7 @@ void KSession::setTextCodec(QTextCodec *codec)
 
 void KSession::setHistorySize(int lines)
 {
+    Q_UNUSED(lines);
     // if(historySize() != lines )
     // {
     //     if (lines < 0)

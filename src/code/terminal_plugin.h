@@ -1,4 +1,6 @@
 #pragma once
+#include <QDir>
+#include <QLibraryInfo>
 #include <QQmlExtensionPlugin>
 
 class TerminalPlugin : public QQmlExtensionPlugin
@@ -7,7 +9,7 @@ class TerminalPlugin : public QQmlExtensionPlugin
     Q_PLUGIN_METADATA(IID QQmlExtensionInterface_iid)
 
 public:
-    void registerTypes(const char *uri);
+    void registerTypes(const char *uri) override;
 
 private:
     void initializeEngine(QQmlEngine *engine, const char *uri) override;
@@ -15,7 +17,8 @@ private:
 
     QString resolveFileUrl(const QString &filePath) const
     {
-        return baseUrl().toString() + QLatin1Char('/') + filePath;
+        const QString qmlModulePath = QDir(QLibraryInfo::path(QLibraryInfo::QmlImportsPath)).filePath(QStringLiteral("org/mauikit/terminal"));
+        return QUrl::fromLocalFile(QDir(qmlModulePath).filePath(filePath)).toString();
     }
 };
 
