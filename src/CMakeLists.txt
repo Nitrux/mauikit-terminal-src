@@ -41,8 +41,8 @@ add_library(MauiKit${MAUI_MAJOR_VERSION}::Terminal ALIAS MauiKitTerminal${MAUI_M
 
 generate_export_header(MauiKitTerminal${MAUI_MAJOR_VERSION} BASE_NAME Terminal)
 set_target_properties(MauiKitTerminal${MAUI_MAJOR_VERSION} PROPERTIES
-    VERSION ${PROJECT_VERSION}
-    SOVERSION ${PROJECT_VERSION_MAJOR}
+    VERSION ${MAUIKIT_SO_VERSION}
+    SOVERSION ${MAUIKIT_SO_VERSION}
     EXPORT_NAME "Terminal")
 
 target_include_directories(MauiKitTerminal${MAUI_MAJOR_VERSION}
