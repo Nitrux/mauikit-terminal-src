@@ -30,6 +30,7 @@
 #include <QDrag>
 #include <QEvent>
 #include <QFile>
+#include <QFontInfo>
 #include <QKeyEvent>
 #include <QLabel>
 #include <QLayout>
@@ -73,6 +74,89 @@ bool TerminalDisplay::_antialiasText = true;
 // we use this to force QPainter to display text in LTR mode
 // more information can be found in: http://unicode.org/reports/tr9/
 const QChar LTR_OVERRIDE_CHAR(0x202D);
+
+namespace
+{
+constexpr auto SYMBOL_FALLBACK_FAMILIES_ENV = "MAUIKIT_TERMINAL_SYMBOL_FONT_FALLBACKS";
+
+QStringList configuredSymbolFallbackFamilies()
+{
+    const QString envValue = qEnvironmentVariable(SYMBOL_FALLBACK_FAMILIES_ENV).trimmed();
+    if (!envValue.isEmpty()) {
+        QStringList configuredFamilies;
+
+        for (const QString &family : envValue.split(QLatin1Char(','), Qt::SkipEmptyParts)) {
+            const QString trimmedFamily = family.trimmed();
+            if (!trimmedFamily.isEmpty()) {
+                configuredFamilies << trimmedFamily;
+            }
+        }
+
+        if (!configuredFamilies.isEmpty()) {
+            return configuredFamilies;
+        }
+    }
+
+    return {
+        QStringLiteral("Symbols Nerd Font Mono"),
+        QStringLiteral("Symbols Nerd Font"),
+        QStringLiteral("MesloLGS NF"),
+    };
+}
+
+bool isPowerlineSeparatorCharacter(QChar character)
+{
+    switch (character.unicode()) {
+    case 0xE0B0:
+    case 0xE0B1:
+    case 0xE0B2:
+    case 0xE0B3:
+    case 0xE0BA:
+    case 0xE0BB:
+    case 0xE0BC:
+        return true;
+    default:
+        return false;
+    }
+}
+
+QStringList preferredSymbolFallbackFamilies(QChar character)
+{
+    if (isPowerlineSeparatorCharacter(character)) {
+        return {
+            QStringLiteral("MesloLGS NF"),
+            QStringLiteral("Symbols Nerd Font Mono"),
+            QStringLiteral("Symbols Nerd Font"),
+        };
+    }
+
+    return configuredSymbolFallbackFamilies();
+}
+
+void appendPreferredSymbolFallbacks(QFont &font)
+{
+    QStringList families = font.families();
+    if (families.isEmpty() && !font.family().isEmpty()) {
+        families << font.family();
+    }
+
+    for (const QString &fallbackFamily : configuredSymbolFallbackFamilies()) {
+        if (!families.contains(fallbackFamily, Qt::CaseInsensitive)) {
+            families << fallbackFamily;
+        }
+    }
+
+    if (!families.isEmpty()) {
+        font.setFamilies(families);
+    }
+}
+
+bool isPrivateUseCharacter(QChar character)
+{
+    const char16_t codePoint = character.unicode();
+    return codePoint >= 0xE000 && codePoint <= 0xF8FF;
+}
+}
 
 /* ------------------------------------------------------------------------- */
 /*                                                                           */
@@ -213,7 +297,7 @@ void TerminalDisplay::fontChange(const QFont &)
         _fontWidth = 1;
     
     _fontAscent = fm.ascent();
-    
+
     Q_EMIT changedFontMetricSignal(_fontHeight, _fontWidth);
     propagateSize();
     update();
@@ -238,6 +322,8 @@ void TerminalDisplay::fontChange(const QFont &)
 void TerminalDisplay::setVTFont(const QFont &f)
 {
     QFont font = f;
+
+    appendPreferredSymbolFallbacks(font);
     
     if (!QFontInfo(font).fixedPitch()) {
         qDebug() << "Using a variable-width font in the terminal.  This may cause performance degradation and display/alignment errors.";
@@ -761,25 +847,30 @@ void TerminalDisplay::drawCharacters(QPainter &painter, const QRect &rect, const
     if (font.bold() != useBold || font.underline() != useUnderline || font.italic() != useItalic || font.strikeOut() != useStrikeOut
         || font.overline() != useOverline) {
         font.setBold(useBold);
-    font.setUnderline(useUnderline);
-    font.setItalic(useItalic);
-    font.setStrikeOut(useStrikeOut);
-    font.setOverline(useOverline);
-    painter.setFont(font);
-        }
-        
-        // setup pen
-        const CharacterColor &textColor = (invertCharacterColor ? style->backgroundColor : style->foregroundColor);
-        const QColor color = textColor.color(_colorTable);
-        QPen pen = painter.pen();
-        if (pen.color() != color) {
-            pen.setColor(color);
-            painter.setPen(color);
-        }
-        
-        // draw text
-        if (isLineCharString(text))
-            drawLineCharString(painter, rect.x(), rect.y(), text, style);
+        font.setUnderline(useUnderline);
+        font.setItalic(useItalic);
+        font.setStrikeOut(useStrikeOut);
+        font.setOverline(useOverline);
+        painter.setFont(font);
+    }
+
+    // setup pen
+    const CharacterColor &textColor = (invertCharacterColor ? style->backgroundColor : style->foregroundColor);
+    const QColor color = textColor.color(_colorTable);
+    QPen pen = painter.pen();
+    if (pen.color() != color) {
+        pen.setColor(color);
+        painter.setPen(color);
+    }
+
+    if (needsFallbackAwareDrawing(text)) {
+        drawFallbackAwareCharacters(painter, rect, text);
+        return;
+    }
+
+    // draw text
+    if (isLineCharString(text))
+        drawLineCharString(painter, rect.x(), rect.y(), text, style);
     else {
         // Force using LTR as the document layout for the terminal area, because
         // there is no use cases for RTL emulator and RTL terminal application.
@@ -817,6 +908,70 @@ void TerminalDisplay::drawTextFragment(QPainter &painter, const QRect &rect, con
     drawCharacters(painter, rect, text, style, invertCharacterColor);
     
     painter.restore();
+}
+
+bool TerminalDisplay::needsFallbackAwareDrawing(QStringView text) const
+{
+    return std::ranges::any_of(text, [](QChar character) {
+        return isPrivateUseCharacter(character);
+    });
+}
+
+QFont TerminalDisplay::fallbackAwareSymbolFont(const QFont &baseFont, QChar character) const
+{
+    QFont symbolFont(baseFont);
+
+    QStringList families = preferredSymbolFallbackFamilies(character);
+    if (isPowerlineSeparatorCharacter(character) && !families.isEmpty()) {
+        symbolFont.setFamily(families.constFirst());
+    }
+
+    for (const QString &family : baseFont.families()) {
+        if (!families.contains(family, Qt::CaseInsensitive)) {
+            families << family;
+        }
+    }
+
+    if (families.isEmpty() && !baseFont.family().isEmpty()) {
+        families << baseFont.family();
+    }
+
+    symbolFont.setFamilies(families);
+
+    return symbolFont;
+}
+
+void TerminalDisplay::drawFallbackAwareCharacters(QPainter &painter, const QRect &rect, QStringView text) const
+{
+    const QFont baseFont = painter.font();
+    const QFontMetricsF baseMetrics(baseFont);
+    const qreal baseBaseline = rect.y() + _fontAscent + _lineSpacing;
+    qreal currentX = rect.x();
+
+    for (const QChar character : text) {
+        const QString glyphText(character);
+
+        if (isPrivateUseCharacter(character)) {
+            const QFont symbolFont = fallbackAwareSymbolFont(baseFont, character);
+            const QFontMetricsF symbolMetrics(symbolFont);
+            const qreal naturalAdvance = symbolMetrics.horizontalAdvance(glyphText);
+            const qreal baseline = rect.y() + ((_fontHeight + symbolMetrics.ascent() - symbolMetrics.descent()) / 2.0);
+
+            painter.save();
+            painter.setFont(symbolFont);
+            painter.drawText(QPointF(currentX, baseline), glyphText);
+            painter.restore();
+
+            currentX += naturalAdvance;
+        } else {
+            painter.save();
+            painter.setFont(baseFont);
+            painter.drawText(QPointF(currentX, baseBaseline), glyphText);
+            painter.restore();
+
+            currentX += baseMetrics.horizontalAdvance(glyphText);
+        }
+    }
 }
 
 void TerminalDisplay::setRandomSeed(uint randomSeed)
@@ -1384,7 +1539,14 @@ int TerminalDisplay::textWidth(const int startColumn, const int length, const in
     QFontMetricsF fm(font());
     qreal result = 0;
     for (int column = 0; column < length; column++) {
-        result += fm.horizontalAdvance(_image[loc(startColumn + column, line)].character);
+        const QChar character = _image[loc(startColumn + column, line)].character;
+        if (isPrivateUseCharacter(character)) {
+            const QFont symbolFont = fallbackAwareSymbolFont(font(), character);
+            const QFontMetricsF symbolMetrics(symbolFont);
+            result += symbolMetrics.horizontalAdvance(QString(character));
+        } else {
+            result += fm.horizontalAdvance(character);
+        }
     }
     return result;
 }

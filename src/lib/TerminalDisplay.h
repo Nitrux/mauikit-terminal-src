@@ -42,6 +42,7 @@ class QTimer;
 class QEvent;
 class QGridLayout;
 class QKeyEvent;
+class QPainter;
 class QScrollBar;
 class QShowEvent;
 class QHideEvent;
@@ -883,6 +884,10 @@ private Q_SLOTS:
 
 private:
     // -- Drawing helpers --
+
+    bool needsFallbackAwareDrawing(QStringView text) const;
+    QFont fallbackAwareSymbolFont(const QFont &baseFont, QChar character) const;
+    void drawFallbackAwareCharacters(QPainter &painter, const QRect &rect, QStringView text) const;
 
     // determine the width of this text
     int textWidth(int startColumn, int length, int line) const;
