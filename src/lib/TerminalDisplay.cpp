@@ -51,9 +51,6 @@
 #include "TerminalCharacterDecoder.h"
 #include "konsole_wcwidth.h"
 
-// std
-#include <ranges>
-
 inline void initResource()
 {
     // Q_INIT_RESOURCE(terminal);
@@ -98,39 +95,12 @@ QStringList configuredSymbolFallbackFamilies()
     }
 
     return {
+        QStringLiteral("MesloLGS NF"),
+        QStringLiteral("MesloLGS Nerd Font Mono"),
+        QStringLiteral("MesloLGS Nerd Font"),
         QStringLiteral("Symbols Nerd Font Mono"),
         QStringLiteral("Symbols Nerd Font"),
-        QStringLiteral("MesloLGS NF"),
     };
-}
-
-bool isPowerlineSeparatorCharacter(QChar character)
-{
-    switch (character.unicode()) {
-    case 0xE0B0:
-    case 0xE0B1:
-    case 0xE0B2:
-    case 0xE0B3:
-    case 0xE0BA:
-    case 0xE0BB:
-    case 0xE0BC:
-        return true;
-    default:
-        return false;
-    }
-}
-
-QStringList preferredSymbolFallbackFamilies(QChar character)
-{
-    if (isPowerlineSeparatorCharacter(character)) {
-        return {
-            QStringLiteral("MesloLGS NF"),
-            QStringLiteral("Symbols Nerd Font Mono"),
-            QStringLiteral("Symbols Nerd Font"),
-        };
-    }
-
-    return configuredSymbolFallbackFamilies();
 }
 
 void appendPreferredSymbolFallbacks(QFont &font)
@@ -149,12 +119,6 @@ void appendPreferredSymbolFallbacks(QFont &font)
     if (!families.isEmpty()) {
         font.setFamilies(families);
     }
-}
-
-bool isPrivateUseCharacter(QChar character)
-{
-    const char16_t codePoint = character.unicode();
-    return codePoint >= 0xE000 && codePoint <= 0xF8FF;
 }
 }
 
@@ -322,6 +286,10 @@ void TerminalDisplay::fontChange(const QFont &)
 void TerminalDisplay::setVTFont(const QFont &f)
 {
     QFont font = f;
+    int strategy = 0;
+
+    strategy |= _antialiasText ? QFont::PreferAntialias : QFont::NoAntialias;
+    font.setStyleHint(QFont::TypeWriter, QFont::StyleStrategy(strategy));
 
     appendPreferredSymbolFallbacks(font);
     
@@ -329,15 +297,14 @@ void TerminalDisplay::setVTFont(const QFont &f)
         qDebug() << "Using a variable-width font in the terminal.  This may cause performance degradation and display/alignment errors.";
     }
     
-    // hint that text should be drawn without anti-aliasing.
-    // depending on the user's font configuration, this may not be respected
-    if (!_antialiasText)
-        font.setStyleStrategy(QFont::NoAntialias);
-    
     // experimental optimization.  Konsole assumes that the terminal is using a
     // mono-spaced font, in which case kerning information should have an effect.
     // Disabling kerning saves some computation when rendering text.
     font.setKerning(false);
+
+    // Keep weight/style fallback behavior predictable across glyph fallback fonts.
+    // Konsole clears styleName for the same reason.
+    font.setStyleName(QString());
     
     m_font = font;
     fontChange(font);
@@ -863,11 +830,6 @@ void TerminalDisplay::drawCharacters(QPainter &painter, const QRect &rect, const
         painter.setPen(color);
     }
 
-    if (needsFallbackAwareDrawing(text)) {
-        drawFallbackAwareCharacters(painter, rect, text);
-        return;
-    }
-
     // draw text
     if (isLineCharString(text))
         drawLineCharString(painter, rect.x(), rect.y(), text, style);
@@ -908,70 +870,6 @@ void TerminalDisplay::drawTextFragment(QPainter &painter, const QRect &rect, con
     drawCharacters(painter, rect, text, style, invertCharacterColor);
     
     painter.restore();
-}
-
-bool TerminalDisplay::needsFallbackAwareDrawing(QStringView text) const
-{
-    return std::ranges::any_of(text, [](QChar character) {
-        return isPrivateUseCharacter(character);
-    });
-}
-
-QFont TerminalDisplay::fallbackAwareSymbolFont(const QFont &baseFont, QChar character) const
-{
-    QFont symbolFont(baseFont);
-
-    QStringList families = preferredSymbolFallbackFamilies(character);
-    if (isPowerlineSeparatorCharacter(character) && !families.isEmpty()) {
-        symbolFont.setFamily(families.constFirst());
-    }
-
-    for (const QString &family : baseFont.families()) {
-        if (!families.contains(family, Qt::CaseInsensitive)) {
-            families << family;
-        }
-    }
-
-    if (families.isEmpty() && !baseFont.family().isEmpty()) {
-        families << baseFont.family();
-    }
-
-    symbolFont.setFamilies(families);
-
-    return symbolFont;
-}
-
-void TerminalDisplay::drawFallbackAwareCharacters(QPainter &painter, const QRect &rect, QStringView text) const
-{
-    const QFont baseFont = painter.font();
-    const QFontMetricsF baseMetrics(baseFont);
-    const qreal baseBaseline = rect.y() + _fontAscent + _lineSpacing;
-    qreal currentX = rect.x();
-
-    for (const QChar character : text) {
-        const QString glyphText(character);
-
-        if (isPrivateUseCharacter(character)) {
-            const QFont symbolFont = fallbackAwareSymbolFont(baseFont, character);
-            const QFontMetricsF symbolMetrics(symbolFont);
-            const qreal naturalAdvance = symbolMetrics.horizontalAdvance(glyphText);
-            const qreal baseline = rect.y() + ((_fontHeight + symbolMetrics.ascent() - symbolMetrics.descent()) / 2.0);
-
-            painter.save();
-            painter.setFont(symbolFont);
-            painter.drawText(QPointF(currentX, baseline), glyphText);
-            painter.restore();
-
-            currentX += naturalAdvance;
-        } else {
-            painter.save();
-            painter.setFont(baseFont);
-            painter.drawText(QPointF(currentX, baseBaseline), glyphText);
-            painter.restore();
-
-            currentX += baseMetrics.horizontalAdvance(glyphText);
-        }
-    }
 }
 
 void TerminalDisplay::setRandomSeed(uint randomSeed)
@@ -1539,14 +1437,7 @@ int TerminalDisplay::textWidth(const int startColumn, const int length, const in
     QFontMetricsF fm(font());
     qreal result = 0;
     for (int column = 0; column < length; column++) {
-        const QChar character = _image[loc(startColumn + column, line)].character;
-        if (isPrivateUseCharacter(character)) {
-            const QFont symbolFont = fallbackAwareSymbolFont(font(), character);
-            const QFontMetricsF symbolMetrics(symbolFont);
-            result += symbolMetrics.horizontalAdvance(QString(character));
-        } else {
-            result += fm.horizontalAdvance(character);
-        }
+        result += fm.horizontalAdvance(_image[loc(startColumn + column, line)].character);
     }
     return result;
 }

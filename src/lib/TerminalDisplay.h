@@ -885,10 +885,6 @@ private Q_SLOTS:
 private:
     // -- Drawing helpers --
 
-    bool needsFallbackAwareDrawing(QStringView text) const;
-    QFont fallbackAwareSymbolFont(const QFont &baseFont, QChar character) const;
-    void drawFallbackAwareCharacters(QPainter &painter, const QRect &rect, QStringView text) const;
-
     // determine the width of this text
     int textWidth(int startColumn, int length, int line) const;
     // determine the area that encloses this series of characters
