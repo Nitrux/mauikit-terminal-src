@@ -173,7 +173,7 @@ Maui.Page
             id: _headerComponent
             Pane
             {
-                width: ListView.view.width
+                width: ListView.view ? ListView.view.width : implicitWidth
                 implicitHeight: Math.min(80, contentHeight) + topPadding + bottomPadding
                 clip: true
                 
@@ -310,7 +310,9 @@ Maui.Page
                 previousLineSearch = startLine
                 
                 
-                _scrollBarLoader.item.highlightLine = startLine
+                if (_scrollBarLoader.item) {
+                    _scrollBarLoader.item.highlightLine = startLine
+                }
                 
                 kterminal.matchFound(startColumn, startLine, endColumn, endLine)
                 console.log("found at: %1 %2 %3 %4".arg(startColumn).arg(startLine).arg(endColumn).arg(endLine));
@@ -320,7 +322,9 @@ Maui.Page
             {
                 previousColumnSearch = 0
                 previousLineSearch = 0
-                _scrollBarLoader.item.highlightLine = -1
+                if (_scrollBarLoader.item) {
+                    _scrollBarLoader.item.highlightLine = -1
+                }
                 
                 kterminal.noMatchFound();
                 console.log("not found");
@@ -561,7 +565,9 @@ Maui.Page
      */
     function forceActiveFocus()
     {
-        kterminal.forceActiveFocus()
+        if (kterminal) {
+            kterminal.forceActiveFocus()
+        }
     }
     
     /**
