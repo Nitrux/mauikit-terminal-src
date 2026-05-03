@@ -30,6 +30,10 @@ set(AUTOMOC_MOC_OPTIONS -Muri=org.mauikit.terminal)
 
 project(Terminal LANGUAGES CXX VERSION ${MAUIKIT_RELEASE_VERSION})
 
+if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    message(FATAL_ERROR "MauiKitTerminal supports Linux only.")
+endif()
+
 find_package(ECM ${REQUIRED_KF_VERSION} NO_MODULE)
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${ECM_MODULE_PATH})
 

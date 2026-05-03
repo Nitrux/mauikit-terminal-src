@@ -6,8 +6,7 @@
 
 
 /*! Helper function to get possible location of layout files.
-By default the KB_LAYOUT_DIR is used (linux/BSD/macports).
-But in some cases (apple bundle) there can be more locations).
+By default the KB_LAYOUT_DIR is used.
 */
 QString kbLayoutDir()
 {
@@ -30,11 +29,6 @@ QString kbLayoutDir()
     //qDebug() << d.path();
     if (d.exists())
         return QCoreApplication::applicationDirPath() + QLatin1String("/kb-layouts/");
-#ifdef Q_WS_MAC
-    d.setPath(QCoreApplication::applicationDirPath() + "/../Resources/kb-layouts/");
-    if (d.exists())
-        return QCoreApplication::applicationDirPath() + "/../Resources/kb-layouts/";
-#endif
     qDebug() << "Cannot find KB_LAYOUT_DIR. Default:" << k;
     return QString();
 }
@@ -51,8 +45,7 @@ void add_custom_color_scheme_dir(const QString& custom_dir)
 }
 
 /*! Helper function to get possible locations of color schemes.
-By default the COLORSCHEMES_DIR is used (linux/BSD/macports).
-But in some cases (apple bundle) there can be more locations).
+By default the COLORSCHEMES_DIR is used.
 */
 const QStringList get_color_schemes_dirs()
 {
@@ -76,15 +69,6 @@ const QStringList get_color_schemes_dirs()
             rval.clear();
         rval << (QCoreApplication::applicationDirPath() + QLatin1String("/color-schemes/"));
     }
-#ifdef Q_WS_MAC
-    d.setPath(QCoreApplication::applicationDirPath() + "/../Resources/color-schemes/");
-    if (d.exists())
-    {
-        if (!rval.isEmpty())
-            rval.clear();
-        rval << (QCoreApplication::applicationDirPath() + "/../Resources/color-schemes/");
-    }
-#endif
     for (const QString& custom_dir : const_cast<const QStringList&>(custom_color_schemes_dirs))
     {
         d.setPath(custom_dir);

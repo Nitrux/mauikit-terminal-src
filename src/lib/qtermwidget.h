@@ -8,7 +8,6 @@
 
 #include "Emulation.h"
 #include "Filter.h"
-#include <QTranslator>
 #include <QWidget>
 
 class QVBoxLayout;

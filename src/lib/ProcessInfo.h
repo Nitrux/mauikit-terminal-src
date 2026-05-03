@@ -338,10 +338,8 @@ protected:
     void readUserName(void) override;
 };
 
-#if !defined(Q_OS_WIN)
 /**
- * Implementation of ProcessInfo for Unix platforms which uses
- * the /proc filesystem
+ * Shared implementation of ProcessInfo for Linux process inspection via /proc.
  */
 class UnixProcessInfo : public ProcessInfo
 {
@@ -390,7 +388,6 @@ private:
      */
     virtual bool readCurrentDir(int pid) = 0;
 };
-#endif
 
 /**
  * Lightweight class which provides additional information about SSH processes.

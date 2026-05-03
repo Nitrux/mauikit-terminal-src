@@ -1567,48 +1567,9 @@ void Vt102Emulation::sendText(const QString &text)
         sendKeyEvent(&event, false); // expose as a big fat keypress event
     }
 }
-//<<<<<<< HEAD
-
-QKeyEvent *Vt102Emulation::remapKeyModifiersForMac(QKeyEvent *event)
-{
-    Qt::KeyboardModifiers modifiers = event->modifiers();
-
-    QFlags<Qt::KeyboardModifier> isTheLabeledKeyCommandPressed = modifiers & Qt::ControlModifier;
-    QFlags<Qt::KeyboardModifier> isTheLabeledKeyControlPressed = modifiers & Qt::MetaModifier;
-    if (isTheLabeledKeyCommandPressed) {
-        qDebug("Command is pressed.");
-        modifiers &= ~Qt::ControlModifier;
-        modifiers |= Qt::MetaModifier;
-    } else {
-        modifiers &= ~Qt::MetaModifier;
-    }
-
-    if (isTheLabeledKeyControlPressed) {
-        qDebug("Control is pressed.");
-        modifiers &= ~Qt::MetaModifier;
-        modifiers |= Qt::ControlModifier;
-    } else {
-        modifiers &= ~Qt::ControlModifier;
-    }
-
-    return new QKeyEvent(QEvent::None,
-                         event->key(),
-                         modifiers,
-                         event->nativeScanCode(),
-                         event->nativeVirtualKey(),
-                         event->nativeModifiers(),
-                         event->text(),
-                         event->isAutoRepeat(),
-                         event->count());
-}
-
 void Vt102Emulation::sendKeyEvent(QKeyEvent *origEvent, bool fromPaste)
 {
-#if defined(Q_OS_MAC)
-    QScopedPointer<QKeyEvent> event(remapKeyModifiersForMac(origEvent));
-#else
     QKeyEvent *event = origEvent;
-#endif
     Qt::KeyboardModifiers modifiers = event->modifiers();
     KeyboardTranslator::States states = KeyboardTranslator::NoState;
 
