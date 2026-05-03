@@ -86,6 +86,11 @@ Maui.Page
      * @property TextField Terminal::findBar
      */
     readonly property alias findBar : findBar
+
+    /**
+     * @brief Whether to expose the built-in Find entry in the contextual menu.
+     */
+    property bool showFindContextMenuAction: true
     
     /**
      * @brief The content of the contextual menu. A set of default actions is already added, to append more actions use this property.
@@ -205,10 +210,16 @@ Maui.Page
             action: _pasteAction
         }               
         
-        MenuSeparator {}
+        MenuSeparator
+        {
+            visible: control.showFindContextMenuAction
+            height: visible ? implicitHeight : 0
+        }
         
         MenuItem
         {
+            visible: control.showFindContextMenuAction
+            height: visible ? implicitHeight : 0
             action: _findAction
         }
     }

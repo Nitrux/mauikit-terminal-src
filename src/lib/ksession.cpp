@@ -308,16 +308,17 @@ void KSession::setTextCodec(QTextCodec *codec)
 
 void KSession::setHistorySize(int lines)
 {
-    Q_UNUSED(lines);
-    // if(historySize() != lines )
-    // {
-    //     if (lines < 0)
-    //         m_session->setHistoryType(HistoryTypeFile());
-    //     else
-    //         m_session->setHistoryType(HistoryTypeBuffer(lines));
-    // 
-    //     Q_EMIT historySizeChanged();
-    // }
+    if (historySize() == lines) {
+        return;
+    }
+
+    if (lines < 0) {
+        m_session->setHistoryType(HistoryTypeFile());
+    } else {
+        m_session->setHistoryType(HistoryTypeBuffer(lines));
+    }
+
+    Q_EMIT historySizeChanged();
 }
 
 int KSession::historySize() const
