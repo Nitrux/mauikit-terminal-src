@@ -22,6 +22,7 @@ set(lib_SRCS
     History.cpp
     HistorySearch.cpp
     KeyboardTranslator.cpp
+    LineBlockCharacters.cpp
     ProcessInfo.cpp
     Pty.cpp
     Screen.cpp

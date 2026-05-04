@@ -49,10 +49,12 @@
 #include <QTime>
 #include <QTimer>
 #include <QUrl>
+#include <QVector>
 #include <QtDebug>
 
 // Konsole
 #include "Filter.h"
+#include "LineBlockCharacters.h"
 #include "ScreenWindow.h"
 #include "TerminalCharacterDecoder.h"
 #include "konsole_wcwidth.h"
@@ -396,12 +398,30 @@ void TerminalDisplay::setColorTable(std::array<ColorEntry, TABLE_COLORS> &&table
 
 constexpr bool TerminalDisplay::isLineChar(QChar c) const
 {
-    return _drawLineChars && ((c.unicode() & 0xFF80) == 0x2500);
+    return _drawLineChars && LineBlockCharacters::canDraw(c.unicode());
 }
 
 constexpr bool TerminalDisplay::isLineCharString(QStringView string) const
 {
-    return (string.size() > 0) && (isLineChar(string[0]));
+    if (string.size() == 0 || !_drawLineChars) {
+        return false;
+    }
+
+    if (LineBlockCharacters::canDraw(string.at(0).unicode())) {
+        return true;
+    }
+
+    if (string.size() <= 1 || !string.at(0).isSurrogate()) {
+        return false;
+    }
+
+    uint ucs4;
+    if (string.at(0).isHighSurrogate()) {
+        ucs4 = QChar::surrogateToUcs4(string.at(0), string.at(1));
+    } else {
+        ucs4 = QChar::surrogateToUcs4(string.at(1), string.at(0));
+    }
+    return LineBlockCharacters::isLegacyComputingSymbol(ucs4);
 }
 
 void TerminalDisplay::fontChange(const QFont &)
@@ -685,7 +705,7 @@ enum LineEncode {
 
 #include "LineFont.h"
 
-static void drawLineChar(QPainter &paint, int x, int y, int w, int h, uint8_t code)
+[[maybe_unused]] static void drawLineChar(QPainter &paint, int x, int y, int w, int h, uint8_t code)
 {
     // Calculate cell midpoints, end points.
     int cx = x + w / 2;
@@ -750,7 +770,7 @@ static void drawLineChar(QPainter &paint, int x, int y, int w, int h, uint8_t co
         paint.drawPoint(cx + 1, cy + 1);
 }
 
-static void drawOtherChar(QPainter &paint, int x, int y, int w, int h, uchar code)
+[[maybe_unused]] static void drawOtherChar(QPainter &paint, int x, int y, int w, int h, uchar code)
 {
     // Calculate cell midpoints, end points.
     const int cx = x + w / 2;
@@ -833,23 +853,19 @@ static void drawOtherChar(QPainter &paint, int x, int y, int w, int h, uchar cod
 
 void TerminalDisplay::drawLineCharString(QPainter &painter, int x, int y, QStringView str, const Character *attributes) const
 {
-    const QPen &currentPen = painter.pen();
-    
-    if ((attributes->rendition & RE_BOLD) && _boldIntense) {
-        QPen boldPen(currentPen);
-        boldPen.setWidth(3);
-        painter.setPen(boldPen);
+    // only turn on anti-aliasing during this short time for the "text"
+    // for the normal text we have TextAntialiasing on demand on
+    // otherwise we have rendering artifacts
+    painter.setRenderHint(QPainter::Antialiasing, _antialiasText);
+
+    const bool useBoldPen = (attributes->rendition & RE_BOLD) && _boldIntense;
+    QRect cellRect(x, y, qRound(_fontWidth), qRound(_fontHeight));
+    QVector<uint> ucs4str = str.toString().toUcs4();
+    for (int i = 0; i < ucs4str.length(); i++) {
+        LineBlockCharacters::draw(painter, cellRect.translated(i * qRound(_fontWidth), 0), ucs4str[i], useBoldPen);
     }
-    
-    for (qsizetype i = 0; i < str.size(); i++) {
-        uint8_t code = static_cast<uint8_t>(str[i].unicode() & 0xffU);
-        if (LineChars[code])
-            drawLineChar(painter, qRound(x + (_fontWidth * i)), y, qRound(_fontWidth), qRound(_fontHeight), code);
-        else
-            drawOtherChar(painter, qRound(x + (_fontWidth * i)), y, qRound(_fontWidth), qRound(_fontHeight), code);
-    }
-    
-    painter.setPen(currentPen);
+
+    painter.setRenderHint(QPainter::Antialiasing, false);
 }
 
 void TerminalDisplay::setKeyboardCursorShape(Emulation::KeyboardCursorShape shape)
