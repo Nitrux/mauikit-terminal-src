@@ -5,9 +5,11 @@
 
 #include <QStringView>
 
+int konsole_wcwidth(wchar_t ucs);
+
 inline int konsole_wcwidth(QChar ucs)
 {
-    return wcwidth(ucs.unicode());
+    return konsole_wcwidth(static_cast<wchar_t>(ucs.unicode()));
 }
 
 // single byte char: +1, multi byte char: +2

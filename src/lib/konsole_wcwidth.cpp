@@ -19,6 +19,11 @@
 
 int konsole_wcwidth(wchar_t ucs)
 {
+    // Keep prompt separators and shade blocks single-cell wide to match Konsole.
+    if ((ucs >= 0x2580 && ucs <= 0x259F) || (ucs >= 0xE000 && ucs <= 0xF8FF)) {
+        return 1;
+    }
+
 #ifdef HAVE_UTF8PROC
     utf8proc_category_t cat = utf8proc_category( ucs );
     if (cat == UTF8PROC_CATEGORY_CO) {

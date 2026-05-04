@@ -1265,6 +1265,8 @@ void TerminalDisplay::updateImage()
     auto newimg = _screenWindow->getImage();
     int lines = _screenWindow->windowLines();
     int columns = _screenWindow->windowColumns();
+    const QVector<LineProperty> previousLineProperties = _lineProperties;
+    const QVector<LineProperty> newLineProperties = _screenWindow->getLineProperties();
     
     setScroll(_screenWindow->currentLine(), _screenWindow->lineCount());
     
@@ -1340,11 +1342,13 @@ void TerminalDisplay::updateImage()
 
                         bool nextIsDoubleWidth = (x + len + 1 == columnsToUpdate) ? false : (newLine[x + len + 1].character.unicode() == 0);
 
-                        if (ch.foregroundColor != cf || ch.backgroundColor != _clipboard || ch.rendition != cr || !dirtyMask[x + len]
-                            || isLineChar(c) != lineDraw || nextIsDoubleWidth != doubleWidth)
+                        const QChar nextChar = ch.character;
+                        if (ch.foregroundColor != cf || ch.backgroundColor != _clipboard
+                            || ((ch.rendition & ~RE_EXTENDED_CHAR) != (cr & ~RE_EXTENDED_CHAR)) || !dirtyMask[x + len]
+                            || isLineChar(nextChar) != lineDraw || nextIsDoubleWidth != doubleWidth)
                             break;
 
-                        disstrU[p++] = c; // fontMap(c);
+                        disstrU[p++] = nextChar; // fontMap(c);
                     }
 
                     bool saveFixedFont = _fixedFont;
@@ -1360,12 +1364,9 @@ void TerminalDisplay::updateImage()
                 }
             }
 
-            // both the top and bottom halves of double height _lines must always be redrawn
-            // although both top and bottom halves contain the same characters, only
-            // the top one is actually
-            // drawn.
-            if (_lineProperties.size() > y)
-                updateLine |= (_lineProperties[y] & LINE_DOUBLEHEIGHT);
+            if (y >= previousLineProperties.size() || y >= newLineProperties.size() || previousLineProperties[y] != newLineProperties[y]) {
+                updateLine = true;
+            }
         }
         
         // if the characters on the line are different in the old and the new _image
@@ -1384,6 +1385,7 @@ void TerminalDisplay::updateImage()
         // current line of the new _image
         memcpy((void *)currentLine, (const void *)newLine, columnsToUpdate * sizeof(Character));
     }
+    _lineProperties = newLineProperties;
     
     // if the new _image is smaller than the previous _image, then ensure that the area
     // outside the new _image is cleared
@@ -1710,20 +1712,32 @@ void TerminalDisplay::drawContents(QPainter &paint, const QRect &rect)
             }
 
             bool lineDraw = isLineChar(c);
-            bool doubleWidth = (_image[qMin(loc(x, y) + 1, _imageSize)].character.unicode() == 0);
+            const bool doubleWidth = (x + 1 <= rlx) ? (_image[loc(x + 1, y)].character.unicode() == 0) : false;
             CharacterColor currentForeground = _image[loc(x, y)].foregroundColor;
             CharacterColor currentBackground = _image[loc(x, y)].backgroundColor;
-            quint8 currentRendition = _image[loc(x, y)].rendition;
+            int currentRendition = _image[loc(x, y)].rendition;
 
-            while (x + len <= rlx && _image[loc(x + len, y)].foregroundColor == currentForeground
-                && _image[loc(x + len, y)].backgroundColor == currentBackground && _image[loc(x + len, y)].rendition == currentRendition
-                && (_image[qMin(loc(x + len, y) + 1, _imageSize)].character.unicode() == 0) == doubleWidth
-                && isLineChar(c = _image[loc(x + len, y)].character.unicode()) == lineDraw) // Assignment!
-            {
-                if (c)
-                    unistr[p++] = c; // fontMap(c);
-                if (doubleWidth) { // assert((_image[loc(x+len,y)+1].character == 0)), see above if condition
-                    len++; // Skip trailing part of multi-column character
+            while (x + len <= rlx) {
+                const Character &next = _image[loc(x + len, y)];
+                const QChar nextChar = next.character;
+
+                if (!nextChar.unicode()) {
+                    break;
+                }
+
+                const bool nextIsDoubleWidth = (x + len + 1 <= rlx) ? (_image[loc(x + len + 1, y)].character.unicode() == 0) : false;
+
+                if (next.foregroundColor != currentForeground || next.backgroundColor != currentBackground
+                    || ((next.rendition & ~RE_EXTENDED_CHAR) != (currentRendition & ~RE_EXTENDED_CHAR))
+                    || nextIsDoubleWidth != doubleWidth || isLineChar(nextChar) != lineDraw) {
+                    break;
+                }
+
+                Q_ASSERT(p < bufferSize);
+                unistr[p++] = nextChar.unicode(); // fontMap(c);
+
+                if (doubleWidth) { // Skip trailing part of multi-column character.
+                    len++;
                 }
                 len++;
             }
@@ -3096,11 +3110,13 @@ void TerminalDisplay::calcGeometry()
     
     if (!_isFixedSize) {
         // ensure that display is always at least one column wide
-        _columns = qMax(1, qRound(_contentWidth / _fontWidth));
+        const int computedColumns = (_fontWidth > 0) ? static_cast<int>(std::floor(_contentWidth / _fontWidth)) : 1;
+        _columns = qMax(1, computedColumns);
         _usedColumns = qMin(_usedColumns, _columns);
         
         // ensure that display is always at least one line high
-        _lines = qMax(1, _contentHeight / qRound(_fontHeight));
+        const int computedLines = (_fontHeight > 0) ? static_cast<int>(std::floor(_contentHeight / _fontHeight)) : 1;
+        _lines = qMax(1, computedLines);
         _usedLines = qMin(_usedLines, _lines);
     }
 }
