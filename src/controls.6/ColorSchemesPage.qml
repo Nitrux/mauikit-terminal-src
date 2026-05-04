@@ -80,9 +80,15 @@ Maui.SettingsPage
         
         GridLayout
         {
-            columns: 3
+            id: _grid
             Layout.fillWidth: true
             opacity: enabled ? 1 : 0.5
+            columnSpacing: Maui.Style.space.medium
+            rowSpacing: Maui.Style.space.medium
+
+            readonly property int minimumCellWidth: 220
+            readonly property int responsiveColumns: Math.max(1, Math.floor((width + columnSpacing) / (minimumCellWidth + columnSpacing)))
+            columns: responsiveColumns
             
             Repeater
             {
@@ -91,11 +97,15 @@ Maui.SettingsPage
                 delegate: Maui.GridBrowserDelegate
                 {
                     Layout.fillWidth: true
+                    Layout.preferredWidth: Math.max(_grid.minimumCellWidth, Math.floor((_grid.width - ((_grid.columns - 1) * _grid.columnSpacing)) / _grid.columns))
+                    Layout.minimumWidth: _grid.minimumCellWidth
+
                     checked: model.name === control.currentColorScheme
                     onClicked: control.currentColorScheme = model.name
                     
                     template.iconComponent: Control
                     {
+                        implicitWidth: Math.max(220, _grid.minimumCellWidth)
                         implicitHeight: Math.max(_layout.implicitHeight + topPadding + bottomPadding, 64)
                         padding: Maui.Style.space.small
                         
@@ -148,6 +158,8 @@ Maui.SettingsPage
                     }
                     
                     label1.text: model.name
+                    label1.wrapMode: Text.NoWrap
+                    label1.elide: Text.ElideRight
                 }
             }
         }
