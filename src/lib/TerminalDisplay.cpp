@@ -22,6 +22,8 @@
 
 // C++
 #include <cmath>
+#include <limits>
+#include <utility>
 
 // Qt
 #include <QAbstractButton>
@@ -31,15 +33,19 @@
 #include <QEvent>
 #include <QFile>
 #include <QFontInfo>
+#include <QFontMetrics>
+#include <QGlyphRun>
 #include <QKeyEvent>
 #include <QLabel>
 #include <QLayout>
 #include <QMimeData>
 #include <QPainter>
 #include <QPixmap>
+#include <QSet>
 #include <QRegularExpression>
 #include <QScrollBar>
 #include <QStyle>
+#include <QTextLayout>
 #include <QTime>
 #include <QTimer>
 #include <QUrl>
@@ -118,6 +124,168 @@ void appendPreferredSymbolFallbacks(QFont &font)
 
     if (!families.isEmpty()) {
         font.setFamilies(families);
+    }
+}
+
+bool glyphTraceEnabled()
+{
+    static const bool enabled = []() {
+        const QString value = qEnvironmentVariable("MAUIKIT_TERMINAL_GLYPH_TRACE").trimmed().toLower();
+        return value == QLatin1String("1") || value == QLatin1String("true") || value == QLatin1String("yes") || value == QLatin1String("on");
+    }();
+    return enabled;
+}
+
+QSet<uint> glyphTraceCodepointFilter()
+{
+    static const QSet<uint> filter = []() {
+        QSet<uint> parsed;
+        const QString value = qEnvironmentVariable("MAUIKIT_TERMINAL_GLYPH_TRACE_CODEPOINTS").trimmed();
+        if (value.isEmpty()) {
+            return parsed;
+        }
+
+        const auto parseHex = [](QString token, uint *out) {
+            token = token.trimmed();
+            if (token.startsWith(QLatin1String("U+"), Qt::CaseInsensitive)) {
+                token = token.mid(2);
+            } else if (token.startsWith(QLatin1String("0x"), Qt::CaseInsensitive)) {
+                token = token.mid(2);
+            }
+            bool ok = false;
+            const uint cp = token.toUInt(&ok, 16);
+            if (!ok) {
+                return false;
+            }
+            *out = cp;
+            return true;
+        };
+
+        for (const QString &rawPart : value.split(QLatin1Char(','), Qt::SkipEmptyParts)) {
+            const QString part = rawPart.trimmed();
+            const int dash = part.indexOf(QLatin1Char('-'));
+            if (dash > 0) {
+                uint start = 0;
+                uint end = 0;
+                if (!parseHex(part.left(dash), &start) || !parseHex(part.mid(dash + 1), &end)) {
+                    continue;
+                }
+                if (end < start) {
+                    std::swap(start, end);
+                }
+                for (uint cp = start; cp <= end; ++cp) {
+                    parsed.insert(cp);
+                    if (cp == std::numeric_limits<uint>::max()) {
+                        break;
+                    }
+                }
+                continue;
+            }
+
+            uint cp = 0;
+            if (parseHex(part, &cp)) {
+                parsed.insert(cp);
+            }
+        }
+
+        return parsed;
+    }();
+    return filter;
+}
+
+void traceResolvedGlyphFamilies(QStringView text, const QFont &font, qreal cellWidth)
+{
+    if (!glyphTraceEnabled() || text.isEmpty()) {
+        return;
+    }
+
+    static bool announced = false;
+    if (!announced) {
+        announced = true;
+        qWarning().noquote() << "[glyph-trace] enabled";
+    }
+
+    QTextLayout layout(text.toString(), font);
+    layout.beginLayout();
+    while (true) {
+        QTextLine line = layout.createLine();
+        if (!line.isValid()) {
+            break;
+        }
+        line.setLineWidth(std::numeric_limits<qreal>::max());
+    }
+    layout.endLayout();
+    const auto runs = layout.glyphRuns(
+        0,
+        text.size(),
+        QTextLayout::GlyphRunRetrievalFlag::RetrieveStringIndexes | QTextLayout::GlyphRunRetrievalFlag::RetrieveString);
+
+    static QSet<QString> seen;
+    const QSet<uint> filter = glyphTraceCodepointFilter();
+    const QFontMetricsF metrics(font);
+
+    for (const QGlyphRun &run : runs) {
+        const QString resolvedFamily = run.rawFont().familyName();
+        const QString resolvedStyle = run.rawFont().styleName();
+        const QList<qsizetype> stringIndexes = run.stringIndexes();
+        if (stringIndexes.isEmpty()) {
+            continue;
+        }
+
+        for (const qsizetype stringIndex : stringIndexes) {
+            if (stringIndex < 0 || stringIndex >= text.size()) {
+                continue;
+            }
+
+            const QChar ch = text.at(stringIndex);
+            if (ch.isLowSurrogate()) {
+                continue;
+            }
+
+            uint codepoint = ch.unicode();
+            if (ch.isHighSurrogate() && stringIndex + 1 < text.size()) {
+                const QChar low = text.at(stringIndex + 1);
+                if (low.isLowSurrogate()) {
+                    codepoint = QChar::surrogateToUcs4(ch, low);
+                }
+            }
+
+            if (!filter.isEmpty() && !filter.contains(codepoint)) {
+                continue;
+            }
+
+            const QString key = QStringLiteral("%1|%2|%3|%4")
+                                    .arg(codepoint, 0, 16)
+                                    .arg(resolvedFamily)
+                                    .arg(resolvedStyle)
+                                    .arg(font.family());
+            if (seen.contains(key)) {
+                continue;
+            }
+            seen.insert(key);
+
+            QString renderedGlyph;
+            if (codepoint <= 0xFFFF) {
+                renderedGlyph = QString(QChar(static_cast<char16_t>(codepoint)));
+            } else {
+                const char32_t ucs4 = static_cast<char32_t>(codepoint);
+                renderedGlyph = QString::fromUcs4(&ucs4, 1);
+            }
+
+            const qreal advance = metrics.horizontalAdvance(renderedGlyph);
+            const qreal cellDelta = advance - cellWidth;
+
+            qWarning().noquote() << QStringLiteral("[glyph-trace] U+%1 glyph='%2' requested='%3' requestedFamilies='%4' resolved='%5' style='%6' advance=%7 cell=%8 delta=%9")
+                                        .arg(codepoint, 4, 16, QLatin1Char('0'))
+                                        .arg(renderedGlyph)
+                                        .arg(font.family())
+                                        .arg(font.families().join(QLatin1String(", ")))
+                                        .arg(resolvedFamily)
+                                        .arg(resolvedStyle)
+                                        .arg(advance, 0, 'f', 3)
+                                        .arg(cellWidth, 0, 'f', 3)
+                                        .arg(cellDelta, 0, 'f', 3);
+        }
     }
 }
 }
@@ -238,18 +406,17 @@ constexpr bool TerminalDisplay::isLineCharString(QStringView string) const
 
 void TerminalDisplay::fontChange(const QFont &)
 {
-    QFontMetricsF fm(font());
+    QFontMetrics fm(font());
     _fontHeight = fm.height() + _lineSpacing;
     
     // waba TerminalDisplay 1.123:
     // "Base character width on widest ASCII character. This prevents too wide
     //  characters in the presence of double wide (e.g. Japanese) characters."
-    // Get the width from representative normal width characters
-    _fontWidth = fm.horizontalAdvance(QLatin1String(REPCHAR)) / (qreal)qstrlen(REPCHAR);
+    _fontWidth = fm.horizontalAdvance(QLatin1Char('M'));
     
     _fixedFont = true;
     
-    int fw = fm.horizontalAdvance(QLatin1Char(REPCHAR[0]));
+    const int fw = fm.horizontalAdvance(QLatin1Char('M'));
     for (unsigned int i = 1; i < qstrlen(REPCHAR); i++) {
         if (fw != fm.horizontalAdvance(QLatin1Char(REPCHAR[i]))) {
             _fixedFont = false;
@@ -801,8 +968,25 @@ void TerminalDisplay::drawCharacters(QPainter &painter, const QRect &rect, const
     if (style->rendition & RE_CONCEAL)
         return;
     
+    static const QFont::Weight FontWeights[] = {
+        QFont::Thin,
+        QFont::Light,
+        QFont::Normal,
+        QFont::Bold,
+        QFont::Black,
+    };
+
     // setup bold and underline
-    bool useBold = ((style->rendition & RE_BOLD) && _boldIntense) || font().bold();
+    const auto normalWeight = font().weight();
+    QFont::Weight boldWeight = QFont::Black;
+    for (const auto weight : FontWeights) {
+        if (weight > normalWeight) {
+            boldWeight = weight;
+            break;
+        }
+    }
+
+    const bool useBold = (style->rendition & RE_BOLD) && _boldIntense;
     const bool useUnderline = style->rendition & RE_UNDERLINE || font().underline();
     const bool useItalic = style->rendition & RE_ITALIC || font().italic();
     const bool useStrikeOut = style->rendition & RE_STRIKEOUT || font().strikeOut();
@@ -811,9 +995,10 @@ void TerminalDisplay::drawCharacters(QPainter &painter, const QRect &rect, const
     painter.setFont(font());
     
     QFont font = painter.font();
-    if (font.bold() != useBold || font.underline() != useUnderline || font.italic() != useItalic || font.strikeOut() != useStrikeOut
+    const bool isCurrentBold = font.weight() >= boldWeight;
+    if (isCurrentBold != useBold || font.underline() != useUnderline || font.italic() != useItalic || font.strikeOut() != useStrikeOut
         || font.overline() != useOverline) {
-        font.setBold(useBold);
+        font.setWeight(useBold ? boldWeight : normalWeight);
         font.setUnderline(useUnderline);
         font.setItalic(useItalic);
         font.setStrikeOut(useStrikeOut);
@@ -830,6 +1015,8 @@ void TerminalDisplay::drawCharacters(QPainter &painter, const QRect &rect, const
         painter.setPen(color);
     }
 
+    traceResolvedGlyphFamilies(text, painter.font(), _fontWidth);
+
     // draw text
     if (isLineCharString(text))
         drawLineCharString(painter, rect.x(), rect.y(), text, style);
@@ -839,11 +1026,15 @@ void TerminalDisplay::drawCharacters(QPainter &painter, const QRect &rect, const
         //
         // This still allows RTL characters to be rendered in the RTL way.
         painter.setLayoutDirection(Qt::LeftToRight);
-        
+
+        int y = rect.y() + _fontAscent;
+        int shifted = _lineSpacing / 2;
+        y += shifted;
+
         if (_bidiEnabled) {
-            painter.drawText(rect.x(), rect.y() + _fontAscent + _lineSpacing, text);
+            painter.drawText(rect.x(), y, text);
         } else {
-            painter.drawText(rect.x(), rect.y() + _fontAscent + _lineSpacing, LTR_OVERRIDE_CHAR + text);
+            painter.drawText(rect.x(), y, LTR_OVERRIDE_CHAR + text);
         }
     }
 }
