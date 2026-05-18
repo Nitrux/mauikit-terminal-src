@@ -432,7 +432,7 @@ void TerminalDisplay::fontChange(const QFont &)
     // waba TerminalDisplay 1.123:
     // "Base character width on widest ASCII character. This prevents too wide
     //  characters in the presence of double wide (e.g. Japanese) characters."
-    _fontWidth = fm.horizontalAdvance(QLatin1Char('M'));
+    _fontWidth = qRound(static_cast<double>(fm.horizontalAdvance(QLatin1String(REPCHAR))) / static_cast<double>(qstrlen(REPCHAR)));
     
     _fixedFont = true;
     
@@ -443,6 +443,7 @@ void TerminalDisplay::fontChange(const QFont &)
             break;
         }
     }
+    _fixedFontOriginal = _fixedFont;
     
     if (_fontWidth < 1)
         _fontWidth = 1;
@@ -451,24 +452,23 @@ void TerminalDisplay::fontChange(const QFont &)
 
     Q_EMIT changedFontMetricSignal(_fontHeight, _fontWidth);
     propagateSize();
+    _drawTextTestFlag = true;
     update();
 }
 
-// void TerminalDisplay::calDrawTextAdditionHeight(QPainter& painter)
-//{
-//     QRect test_rect, feedback_rect;
-//	test_rect.setRect(1, 1, qRound(_fontWidth) * 4, _fontHeight);
-//     painter.drawText(test_rect, Qt::AlignBottom, LTR_OVERRIDE_CHAR + QLatin1String("Mq"), &feedback_rect);
+void TerminalDisplay::calDrawTextAdditionHeight(QPainter &painter)
+{
+    QRect testRect;
+    QRect feedbackRect;
+    testRect.setRect(1, 1, qRound(_fontWidth) * 4, qRound(_fontHeight));
+    painter.save();
+    painter.setOpacity(0);
+    painter.drawText(testRect, Qt::AlignBottom, LTR_OVERRIDE_CHAR + QLatin1String("Mq"), &feedbackRect);
+    painter.restore();
 
-//	//qDebug() << "test_rect:" << test_rect << "feeback_rect:" << feedback_rect;
-
-//	_drawTextAdditionHeight = (feedback_rect.height() - _fontHeight) / 2;
-//	if(_drawTextAdditionHeight < 0) {
-//	  _drawTextAdditionHeight = 0;
-//	}
-
-//  _drawTextTestFlag = false;
-//}
+    _drawTextAdditionHeight = qMax(0, (feedbackRect.height() - qRound(_fontHeight)) / 2);
+    _drawTextTestFlag = false;
+}
 
 void TerminalDisplay::setVTFont(const QFont &f)
 {
@@ -488,6 +488,8 @@ void TerminalDisplay::setVTFont(const QFont &f)
     // mono-spaced font, in which case kerning information should have an effect.
     // Disabling kerning saves some computation when rendering text.
     font.setKerning(false);
+    // Match Konsole's hinting preference to keep glyph placement aligned to grid.
+    font.setHintingPreference(QFont::PreferFullHinting);
 
     // Keep weight/style fallback behavior predictable across glyph fallback fonts.
     // Konsole clears styleName for the same reason.
@@ -518,9 +520,13 @@ TerminalDisplay::TerminalDisplay(QQuickItem *parent)
 , _screenWindow(nullptr)
 , _allowBell(true)
 , _gridLayout(nullptr)
+, _fixedFont(true)
+, _fixedFontOriginal(true)
 , _fontHeight(1)
 , _fontWidth(1)
 , _fontAscent(1)
+, _drawTextAdditionHeight(0)
+, _drawTextTestFlag(false)
 , _boldIntense(true)
 , _lines(1)
 , _columns(1)
@@ -960,12 +966,10 @@ void TerminalDisplay::drawCursor(QPainter &painter,
             // if ( hasFocus() )
             if (hasActiveFocus()) {
                 painter.fillRect(cursorRect, _cursorColor.isValid() ? _cursorColor : foregroundColor);
-                
-                if (!_cursorColor.isValid()) {
-                    // invert the colour used to draw the text to ensure that the character at
-                    // the cursor position is readable
-                    invertCharacterColor = true;
-                }
+
+                // Keep cursor glyph readable and visually distinct over selected text
+                // and custom cursor colors.
+                invertCharacterColor = true;
             }
         } else if (_cursorShape == Emulation::KeyboardCursorShape::UnderlineCursor)
             painter.drawLine(cursorRect.left(), cursorRect.bottom(), cursorRect.right(), cursorRect.bottom());
@@ -974,7 +978,7 @@ void TerminalDisplay::drawCursor(QPainter &painter,
     }
 }
 
-void TerminalDisplay::drawCharacters(QPainter &painter, const QRect &rect, const QString &text, const Character *style, bool invertCharacterColor)
+void TerminalDisplay::drawCharacters(QPainter &painter, const QRect &rect, const QString &text, const Character *style, bool invertCharacterColor, bool tooWide)
 {
     // don't draw text which is currently blinking
     if (_blinking && (style->rendition & RE_BLINK))
@@ -1048,14 +1052,22 @@ void TerminalDisplay::drawCharacters(QPainter &painter, const QRect &rect, const
         y += shifted;
 
         if (_bidiEnabled) {
-            painter.drawText(rect.x(), y, text);
+            if (tooWide) {
+                QRect drawRect(rect.topLeft(), rect.size());
+                drawRect.setHeight(rect.height() + _drawTextAdditionHeight);
+                painter.drawText(drawRect, Qt::AlignBottom, text);
+            } else {
+                painter.drawText(rect.x(), y, text);
+            }
         } else {
+            // Avoid hard clipping in single-cell draws (notably for Nerd Font glyphs)
+            // while still forcing LTR terminal layout.
             painter.drawText(rect.x(), y, LTR_OVERRIDE_CHAR + text);
         }
     }
 }
 
-void TerminalDisplay::drawTextFragment(QPainter &painter, const QRect &rect, const QString &text, const Character *style)
+void TerminalDisplay::drawTextFragment(QPainter &painter, const QRect &rect, const QString &text, const Character *style, bool tooWide)
 {
     painter.save();
     
@@ -1074,7 +1086,7 @@ void TerminalDisplay::drawTextFragment(QPainter &painter, const QRect &rect, con
         drawCursor(painter, rect, foregroundColor, backgroundColor, invertCharacterColor);
     
     // draw text
-    drawCharacters(painter, rect, text, style, invertCharacterColor);
+    drawCharacters(painter, rect, text, style, invertCharacterColor, tooWide);
     
     painter.restore();
 }
@@ -1484,6 +1496,9 @@ void TerminalDisplay::focusInEvent(QFocusEvent *)
 // QMLTermWidget version. See the upstream commented version for reference.
 void TerminalDisplay::paint(QPainter *painter)
 {
+    if (_drawTextTestFlag) {
+        calDrawTextAdditionHeight(*painter);
+    }
     QRect clipRect = painter->clipBoundingRect().toAlignedRect();
     QRect dirtyRect = clipRect.isValid() ? clipRect : contentsRect();
     drawContents(*painter, dirtyRect);
@@ -1653,9 +1668,11 @@ int TerminalDisplay::textWidth(const int startColumn, const int length, const in
 
 QRect TerminalDisplay::calculateTextArea(int topLeftX, int topLeftY, int startColumn, int line, int length)
 {
-    int left = _fixedFont ? qRound(_fontWidth) * startColumn : textWidth(0, startColumn, line);
+    // Always use fixed cell geometry for terminal rendering. This avoids
+    // per-glyph drift when selection/cursor state changes.
+    int left = qRound(_fontWidth) * startColumn;
     int top = qRound(_fontHeight) * line;
-    int width = _fixedFont ? qRound(_fontWidth) * length : textWidth(startColumn, length, line);
+    int width = qRound(_fontWidth) * length;
     return {_leftMargin + topLeftX + left, _topMargin + topLeftY + top, width, qRound(_fontHeight)};
 }
 
@@ -1676,6 +1693,7 @@ void TerminalDisplay::drawContents(QPainter &paint, const QRect &rect)
     if (_image.empty()) {
         return;
     }
+    const QFontMetrics fm(font());
     
     const int bufferSize = _usedColumns;
     QString unistr;
@@ -1712,35 +1730,12 @@ void TerminalDisplay::drawContents(QPainter &paint, const QRect &rect)
             }
 
             bool lineDraw = isLineChar(c);
-            const bool doubleWidth = (x + 1 <= rlx) ? (_image[loc(x + 1, y)].character.unicode() == 0) : false;
-            CharacterColor currentForeground = _image[loc(x, y)].foregroundColor;
-            CharacterColor currentBackground = _image[loc(x, y)].backgroundColor;
-            int currentRendition = _image[loc(x, y)].rendition;
+            const int charWidth = c ? fm.horizontalAdvance(QChar(c)) : qRound(_fontWidth);
+            const bool tooWide = _fixedFontOriginal && !lineDraw && c && charWidth >= (2 * qRound(_fontWidth));
 
-            while (x + len <= rlx) {
-                const Character &next = _image[loc(x + len, y)];
-                const QChar nextChar = next.character;
-
-                if (!nextChar.unicode()) {
-                    break;
-                }
-
-                const bool nextIsDoubleWidth = (x + len + 1 <= rlx) ? (_image[loc(x + len + 1, y)].character.unicode() == 0) : false;
-
-                if (next.foregroundColor != currentForeground || next.backgroundColor != currentBackground
-                    || ((next.rendition & ~RE_EXTENDED_CHAR) != (currentRendition & ~RE_EXTENDED_CHAR))
-                    || nextIsDoubleWidth != doubleWidth || isLineChar(nextChar) != lineDraw) {
-                    break;
-                }
-
-                Q_ASSERT(p < bufferSize);
-                unistr[p++] = nextChar.unicode(); // fontMap(c);
-
-                if (doubleWidth) { // Skip trailing part of multi-column character.
-                    len++;
-                }
-                len++;
-            }
+            // Render one terminal cell group at a time (plus trailing half for
+            // double-width characters). This avoids word-level shaping drift
+            // where character positions appear to move while selecting text.
             if ((x + len < _usedColumns) && (!_image[loc(x + len, y)].character.unicode()))
                 len++; // Adjust for trailing part of multi-column character
 
@@ -1775,7 +1770,7 @@ void TerminalDisplay::drawContents(QPainter &paint, const QRect &rect)
                 textArea.moveTopLeft(textScale.inverted().map(textArea.topLeft()));
                 
                 // paint text fragment
-                drawTextFragment(paint, textArea, unistr, &_image[loc(x, y)]); //,
+                drawTextFragment(paint, textArea, unistr, &_image[loc(x, y)], tooWide); //,
                 // 0,
                 //!_isPrinting );
                 
@@ -2407,13 +2402,7 @@ CharPos TerminalDisplay::getCharacterPosition(const QPointF &widgetPoint) const
         line = _usedLines - 1;
     
     int x = widgetPoint.x() + qRound(_fontWidth) / 2 - contentsRect().left() - _leftMargin;
-    if (_fixedFont)
-        column = x / qRound(_fontWidth);
-    else {
-        column = 0;
-        while (column + 1 < _usedColumns && x > textWidth(0, column + 1, line))
-            column++;
-    }
+    column = x / qRound(_fontWidth);
     
     if (column < 0)
         column = 0;

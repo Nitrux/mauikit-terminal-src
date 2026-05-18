@@ -896,7 +896,7 @@ private:
     void drawContents(QPainter &paint, const QRect &rect);
     // draws a section of text, all the text in this section
     // has a common color and style
-    void drawTextFragment(QPainter &painter, const QRect &rect, const QString &text, const Character *style);
+    void drawTextFragment(QPainter &painter, const QRect &rect, const QString &text, const Character *style, bool tooWide = false);
     // draws the background for a text fragment
     // if useOpacitySetting is true then the color's alpha value will be set to
     // the display's transparency (set with setOpacity()), otherwise the background
@@ -905,12 +905,13 @@ private:
     // draws the cursor character
     void drawCursor(QPainter &painter, const QRect &rect, const QColor &foregroundColor, const QColor &backgroundColor, bool &invertColors);
     // draws the characters or line graphics in a text fragment
-    void drawCharacters(QPainter &painter, const QRect &rect, const QString &text, const Character *style, bool invertCharacterColor);
+    void drawCharacters(QPainter &painter, const QRect &rect, const QString &text, const Character *style, bool invertCharacterColor, bool tooWide = false);
     // draws a string of line graphics
     void drawLineCharString(QPainter &painter, int x, int y, QStringView str, const Character *attributes) const;
 
     // draws the preedit string for input methods
     void drawInputMethodPreeditString(QPainter &painter, const QRect &rect);
+    void calDrawTextAdditionHeight(QPainter &painter);
 
     // --
 
@@ -963,9 +964,12 @@ private:
     QGridLayout *_gridLayout;
 
     bool _fixedFont; // has fixed pitch
+    bool _fixedFontOriginal; // used to preserve width fallback behavior for text rendering
     qreal _fontHeight; // height
     qreal _fontWidth; // width
     int _fontAscent; // ascend
+    int _drawTextAdditionHeight; // additional height to prevent text truncation
+    bool _drawTextTestFlag; // indicates if drawText metrics test is pending
     bool _boldIntense; // Whether intense colors should be rendered with bold font
 
     int _leftMargin; // offset
