@@ -93,6 +93,11 @@ Maui.Page
     property bool showFindContextMenuAction: true
     
     /**
+     *  Whether to show the selected text preview at the top of the contextual menu.
+     */
+    property bool showSelectionPreviewInContextMenu: true
+    
+    /**
      * @brief The content of the contextual menu. A set of default actions is already added, to append more actions use this property.
      * @code
      * menu: [
@@ -171,7 +176,7 @@ Maui.Page
     Maui.ContextualMenu
     {
         id: terminalMenu        
-        Maui.Controls.component: !kterminal.isTextSelected ? null : _headerComponent
+        Maui.Controls.component: control.showSelectionPreviewInContextMenu && kterminal.isTextSelected ? _headerComponent : null
         
         Component 
         {
