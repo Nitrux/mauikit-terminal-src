@@ -85,9 +85,10 @@ Item
             Maui.Theme.colorSet: Maui.Theme.Complementary // text color of terminal is also complementary
             Maui.Theme.inherit: false
 
-            // parent: terminalProxyFlickable
+            parent: terminalProxyFlickable
             width: visible ? implicitWidth : 0
-            x: control.width - width - Maui.Style.space.small
+            height: terminalProxyFlickable.height
+            x: Maui.Style.scrollBarOnLeft ? Maui.Style.space.small : control.width - width - Maui.Style.space.small
             y: 0
             policy: ScrollBar.AsNeeded
         }
