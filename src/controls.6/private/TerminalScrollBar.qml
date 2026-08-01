@@ -85,9 +85,11 @@ Item
             Maui.Theme.colorSet: Maui.Theme.Complementary // text color of terminal is also complementary
             Maui.Theme.inherit: false
 
-            parent: terminalProxyFlickable
+            // Keep the attached scrollbar outside the Flickable's geometry
+            // management so its configured side is respected.
+            parent: control
             width: visible ? implicitWidth : 0
-            height: terminalProxyFlickable.height
+            height: control.height
             x: Maui.Style.scrollBarOnLeft ? Maui.Style.space.small : control.width - width - Maui.Style.space.small
             y: 0
             policy: ScrollBar.AsNeeded
