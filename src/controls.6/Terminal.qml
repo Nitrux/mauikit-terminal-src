@@ -324,12 +324,7 @@ Maui.Page
             {
                 previousColumnSearch = startColumn
                 previousLineSearch = startLine
-                
-                
-                if (_scrollBarLoader.item) {
-                    _scrollBarLoader.item.highlightLine = startLine
-                }
-                
+
                 kterminal.matchFound(startColumn, startLine, endColumn, endLine)
                 console.log("found at: %1 %2 %3 %4".arg(startColumn).arg(startLine).arg(endColumn).arg(endLine));
             }
@@ -338,10 +333,6 @@ Maui.Page
             {
                 previousColumnSearch = 0
                 previousLineSearch = 0
-                if (_scrollBarLoader.item) {
-                    _scrollBarLoader.item.highlightLine = -1
-                }
-                
                 kterminal.noMatchFound();
                 console.log("not found");
             }
