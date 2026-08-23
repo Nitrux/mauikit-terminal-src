@@ -41,8 +41,6 @@ void TerminalPlugin::initializeEngine(QQmlEngine *engine, const char *uri)
             if (QDir(cs).exists()) break;
         }
 
-        qDebug() << "MAUIKIT TERMINAL IMPORT PATH LISTS" << pwds << cs << kbl;
-
         setenv("KB_LAYOUT_DIR",kbl.toUtf8().constData(),1);
         setenv("COLORSCHEMES_DIR",cs.toUtf8().constData(),1);
     }

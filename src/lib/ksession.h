@@ -29,8 +29,11 @@
 using namespace Konsole;
 
 /**
- * @brief The KSession class
- * Creates and controls the terminal session. This class is exposed to the QML engine as `Session`.
+ * @brief Adapts a Konsole session for use by the Terminal QML control.
+ *
+ * It configures and starts the shell process, attaches terminal displays,
+ * exposes process and working-directory state, and provides history, search,
+ * input, and signal operations. This class is exposed to the QML engine as `Session`.
  *
  * @note This class is not part of any public API and it is only part of the Terminal QML control implementation
  */
@@ -98,44 +101,26 @@ public:
     ~KSession();
     
 public:
-    /**
-     * @brief addView
-     * @param display
-     */
+    /** Attaches  display to this terminal session. */
     void addView(TerminalDisplay *display);
 
-    /**
-     * @brief removeView
-     * @param display
-     */
+    /** Detaches  display from this terminal session. */
     void removeView(TerminalDisplay *display);
     
     int getRandomSeed();
     QString getKeyBindings();
 
-    /**
-     * @brief Set the custom enviroment variables
-     * @param environment
-     */
+    /** Sets the environment passed to the shell process. */
     void setEnvironment(const QStringList & environment);
     
-    /**
-     * @brief Initial working directory
-     * @param dir
-     */
+    /** Sets the directory in which the shell process starts. */
     void setInitialWorkingDirectory(const QString & dir);
     QString getInitialWorkingDirectory();
     
-    /**
-     * @brief Text codec, default is UTF-8
-     * @param codec
-     */
+    /** Sets the codec used to encode and decode terminal text. The default is UTF-8. */
     void setTextCodec(QTextCodec * codec);
     
-    /**
-     * @brief History size for scrolling
-     * @param lines
-     */
+    /** Sets the scrollback line limit. A negative value enables file-backed history. */
     void setHistorySize(int lines); //infinite if lines < 0
     int historySize() const;
     
@@ -189,124 +174,71 @@ public:
      */
     QString currentDir();
     
-    /**
-     * @brief setMonitorSilence
-     * @param value
-     */
+    /** Enables or disables silence monitoring for the terminal process. */
     void setMonitorSilence(bool value);
 
-    /**
-     * @brief monitorSilence
-     * @return
-     */
+    /** Returns whether silence monitoring is enabled. */
     bool monitorSilence() const;
 
 Q_SIGNALS:
-    /**
-     * @brief started
-     */
+    /** Emitted when the terminal process starts. */
     void started();
 
-    /**
-     * @brief finished
-     */
+    /** Emitted when the terminal process finishes. */
     void finished();
 
-    /**
-     * @brief copyAvailable
-     */
+    /** Emitted when the availability of copyable selected text changes. */
     void copyAvailable(bool);
     
-    /**
-     * @brief termGetFocus
-     */
+    /** Emitted when the terminal display gains focus. */
     void termGetFocus();
 
-    /**
-     * @brief termLostFocus
-     */
+    /** Emitted when the terminal display loses focus. */
     void termLostFocus();
     
-    /**
-     * @brief termKeyPressed
-     */
+    /** Forwards a key event received by the terminal display. */
     void termKeyPressed(QKeyEvent *, bool);
     
-    /**
-     * @brief changedKeyBindings
-     * @param kb
-     */
+    /** Emitted when the active keyboard-translation scheme changes. */
     void changedKeyBindings(QString kb);
     
-    /**
-     * @brief titleChanged
-     */
+    /** Emitted when the session title changes. */
     void titleChanged();
     
-    /**
-     * @brief historySizeChanged
-     */
+    /** Emitted when the scrollback limit changes. */
     void historySizeChanged();
     
-    /**
-     * @brief initialWorkingDirectoryChanged
-     */
+    /** Emitted when the configured initial working directory changes. */
     void initialWorkingDirectoryChanged();
     
-    /**
-     * @brief matchFound
-     * @param startColumn
-     * @param startLine
-     * @param endColumn
-     * @param endLine
-     */
+    /** Reports the terminal coordinates of a search match. */
     void matchFound(int startColumn, int startLine, int endColumn, int endLine);
 
-    /**
-     * @brief noMatchFound
-     */
+    /** Emitted when a terminal-history search finds no match. */
     void noMatchFound();
 
-    /**
-     * @brief hasActiveProcessChanged
-     */
+    /** Emitted when the presence of an active subprocess changes. */
     void hasActiveProcessChanged();
 
-    /**
-     * @brief foregroundProcessNameChanged
-     */
+    /** Emitted when the foreground process name changes. */
     void foregroundProcessNameChanged();
     
-    /**
-     * @brief processHasSilent
-     * @param value
-     */
+    /** Reports whether the monitored process has become silent. */
     void processHasSilent(bool value);
 
-    /**
-     * @brief bellRequest
-     * @param message
-     */
+    /** Emitted when the terminal requests an audible or visual bell. */
     void bellRequest(QString message);
 
-    /**
-     * @brief monitorSilenceChanged
-     */
+    /** Emitted when silence monitoring is enabled or disabled. */
     void monitorSilenceChanged();
 
-    /**
-     * @brief currentDirChanged
-     */
+    /** Emitted when the terminal working directory changes. */
     void currentDirChanged();
     
-    /**
-     * @brief shellProgramChanged
-     */
+    /** Emitted when the configured shell executable changes. */
     void shellProgramChanged();
 
-    /**
-     * @brief argsChanged
-     */
+    /** Emitted when the shell argument list changes. */
     void argsChanged();
 
 public Q_SLOTS:
@@ -315,64 +247,34 @@ public Q_SLOTS:
      */
     void setKeyBindings(const QString & kb);
 
-    /**
-     * @brief setTitle
-     * @param name
-     */
+    /** Sets the session title to @p name. */
     void setTitle(QString name);
     
-    /**
-     * @brief startShellProgram
-     */
+    /** Starts the configured shell program unless it is already running. */
     void startShellProgram();
     
-    /**
-     * @brief sendSignal
-     * @param signal
-     * @return
-     */
+    /** Sends @p signal to the running process and returns whether it was sent. */
     bool sendSignal(int signal);
     
-    /**
-     * @brief Shell program, default is `/bin/bash`
-     * @param progname
-     */
+    /** Sets the shell executable. It initially follows the SHELL environment variable. */
     void setShellProgram(const QString & progname);
 
-    /**
-     * @brief shellProgram
-     * @return
-     */
+    /** Returns the configured shell executable. */
     QString shellProgram() const;
 
-    /**
-     * @brief Shell program args, default is none
-     * @param args
-     */
+    /** Sets the arguments passed to the shell executable. */
     void setArgs(const QStringList &args);
 
-    /**
-     * @brief args
-     * @return
-     */
+    /** Returns the arguments passed to the shell executable. */
     QStringList args() const;
 
-    /**
-     * @brief getShellPID
-     * @return
-     */
+    /** Returns the process identifier of the shell process. */
     int getShellPID();
 
-    /**
-     * @brief changeDir
-     * @param dir
-     */
+    /** Requests that an idle foreground shell change to @p dir. */
     void changeDir(const QString & dir);
     
-    /**
-     * @brief Send some text to terminal
-     * @param text
-     */
+    /** Sends @p text to the terminal as process input. */
     void sendText(QString text);
 
     /**
@@ -383,9 +285,7 @@ public Q_SLOTS:
      */
     void sendKey(int rep, int key, int mod) const;
     
-    /**
-     * @brief clearScreen
-     */
+    /** Clears the visible terminal screen. */
     void clearScreen();
     
     /**

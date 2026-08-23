@@ -10,6 +10,14 @@ namespace Konsole
 class ColorScheme;
 }
 
+/**
+ * @brief Defines the adaptive terminal color table used by TerminalDisplay.
+ *
+ * foregroundColor and backgroundColor define the base entries. color2 through
+ * color9 define the remaining normal-color entries; their bright variants are
+ * derived automatically according to the background luminance. Changes are
+ * applied after a short coalescing delay.
+ */
 class CustomColorScheme : public QObject, public QQmlParserStatus
 {
     Q_INTERFACES(QQmlParserStatus)
