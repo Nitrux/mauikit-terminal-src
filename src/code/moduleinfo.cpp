@@ -1,6 +1,6 @@
 #include "moduleinfo.h"
 #include <QString>
-#include "../terminal_version.h"
+#include "terminal_version.h"
 
 QString MauiKitTerminal::versionString()
 {

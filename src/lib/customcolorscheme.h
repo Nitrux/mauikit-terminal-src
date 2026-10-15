@@ -1,6 +1,8 @@
 #pragma once
 #include <QObject>
-#include <QQmlParserStatus>
+#include <QtQmlIntegration/qqmlintegration.h>
+#include <QtQml>
+#include <QtQml/qqmlparserstatus.h>
 #include <QColor>
 
 class QTimer;
