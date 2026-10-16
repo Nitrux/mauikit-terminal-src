@@ -43,7 +43,7 @@ install_subdir('src/lib/color-schemes', install_dir: qml_dir)
 install_subdir('src/lib/kb-layouts', install_dir: qml_dir)
 install_headers(files('src/code/moduleinfo.h') + [export_header, terminal_version_header], subdir: 'MauiKit4/Terminal')
 pkg = import('pkgconfig')
-pkg.generate(terminal, name: 'MauiKit Terminal 4', filebase: 'MauiKitTerminal4', version: meson.project_version(), description: 'MauiKit terminal library', requires: 'MauiKit4 Qt6Core Qt6Core5Compat Qt6Gui Qt6Qml Qt6Quick Qt6Widgets KF6ConfigCore KF6CoreAddons KF6I18n KF6Pty')
+pkg.generate(terminal, name: 'MauiKit Terminal 4', filebase: 'MauiKitTerminal4', version: meson.project_version(), description: 'MauiKit terminal library', requires: 'MauiKit4 Qt6Core Qt6Core5Compat Qt6Gui Qt6Qml Qt6Quick Qt6Widgets')
 
 cmake_targets = configure_file(
     input: 'meson-content.in',
