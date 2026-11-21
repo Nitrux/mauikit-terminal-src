@@ -75,3 +75,19 @@ install(FILES
     ${CMAKE_CURRENT_BINARY_DIR}/terminal_export.h
     DESTINATION ${KDE_INSTALL_INCLUDEDIR}/MauiKit${MAUI_MAJOR_VERSION}/Terminal
     COMPONENT Devel)
+
+target_precompile_headers(MauiKitTerminal${MAUI_MAJOR_VERSION} PRIVATE
+    <QDebug>
+    <QFileInfo>
+    <QGuiApplication>
+    <QQmlEngine>
+    <QQuickWindow>
+)
+
+target_precompile_headers(MauiKitTerminal${MAUI_MAJOR_VERSION}plugin PRIVATE
+    <QDebug>
+    <QFileInfo>
+    <QGuiApplication>
+    <QQmlEngine>
+    <QQuickWindow>
+)
