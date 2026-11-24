@@ -1,5 +1,9 @@
 project(KTerminalLib)
 
+if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
+    set(CMAKE_INSTALL_PREFIX "/usr" CACHE PATH "Install path prefix" FORCE)
+endif()
+
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 
 find_package(KF${KF_MAJOR_VERSION} REQUIRED COMPONENTS Pty)
